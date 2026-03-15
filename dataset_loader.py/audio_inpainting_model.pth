@@ -1,0 +1,56 @@
+import os
+import torch
+import librosa
+import numpy as np
+from torch.utils.data import Dataset
+
+
+class AudioDataset(Dataset):
+
+    def __init__(self, folder, sample_rate=16000, max_length=4000):
+
+        self.files = [
+            os.path.join(folder, f)
+            for f in os.listdir(folder)
+            if f.endswith(".wav")
+        ]
+
+        self.sample_rate = sample_rate
+        self.max_length = max_length
+
+
+    def __len__(self):
+
+        return len(self.files)
+
+
+    def __getitem__(self, idx):
+
+        file = self.files[idx]
+
+        signal, sr = librosa.load(file, sr=self.sample_rate)
+
+        signal = signal[:self.max_length]
+
+        if len(signal) < self.max_length:
+            signal = np.pad(signal, (0, self.max_length - len(signal)))
+
+        # Random missing region
+        gap_start = np.random.randint(1000, 2000)
+        gap_end = gap_start + 200
+
+        mask = np.ones(len(signal))
+        mask[gap_start:gap_end] = 0
+
+        context_x = np.where(mask == 1)[0] / len(signal)
+        context_y = signal[mask == 1]
+
+        target_x = np.where(mask == 0)[0] / len(signal)
+        target_y = signal[mask == 0]
+
+        return (
+            torch.tensor(context_x).float().unsqueeze(1),
+            torch.tensor(context_y).float().unsqueeze(1),
+            torch.tensor(target_x).float().unsqueeze(1),
+            torch.tensor(target_y).float().unsqueeze(1)
+        )
